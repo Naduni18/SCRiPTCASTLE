@@ -1,0 +1,20 @@
+appId: com.yourco.ai-test-agent
+productName: AI Test Agent
+directories:
+  output: dist
+files:
+  - src/**
+  - node_modules/**
+win:
+  target: nsis
+  icon: assets/icon.ico
+mac:
+  target: dmg
+  icon: assets/icon.icns
+  category: public.app-category.developer-tools
+linux:
+  target: AppImage
+  category: Development
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
