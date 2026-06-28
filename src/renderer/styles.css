@@ -1295,3 +1295,69 @@ pre {
 }
 
 .excel-btn:hover { background: rgba(52,211,153,0.2); }
+
+/* ── Session bar ──────────────────────────────────────────────── */
+.session-bar {
+  padding: 10px 14px;
+  border-top: 1px solid var(--c-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.session-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--c-text-3);
+}
+
+.session-info svg { flex-shrink: 0; }
+
+#sessionInfoText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.session-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 8px;
+  background: var(--c-card);
+  border: 1px solid var(--c-border-mid);
+  border-radius: var(--radius-sm);
+  color: var(--c-text-2);
+  font-family: var(--font);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+  white-space: nowrap;
+}
+
+.session-btn:hover:not(:disabled) {
+  background: var(--c-accent-dim);
+  border-color: var(--c-accent-mid);
+  color: var(--c-accent);
+}
+
+.session-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.session-btn.active {
+  background: var(--c-accent-dim);
+  border-color: var(--c-accent-mid);
+  color: var(--c-accent);
+}

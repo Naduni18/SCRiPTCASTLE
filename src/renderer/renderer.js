@@ -192,6 +192,187 @@ document.addEventListener('DOMContentLoaded', () => {
     if (saveBtn) saveBtn.disabled = !has;
   }
 
+  /* ══════════════════════════════════════════════════════════
+     SESSION PERSISTENCE
+     ══════════════════════════════════════════════════════════ */
+
+  let sessionFolderPath = null;
+
+  const saveSessionBtn = $('saveSessionBtn');
+  const loadSessionBtn = $('loadSessionBtn');
+  const sessionInfoText = $('sessionInfoText');
+
+  // ── Build session object ───────────────────────────────────
+  function buildSession() {
+    return {
+      version:   '1.0',
+      savedAt:   new Date().toISOString(),
+      baseUrl:   $('baseUrl')?.value.trim()  ?? '',
+      modules:   $('modules')?.value.trim()  ?? '',
+      results: {
+        0: results[0],
+        1: results[1],
+        2: results[2],
+        3: results[3]
+      },
+      chatHistory
+    };
+  }
+
+  // ── Restore session into the UI ────────────────────────────
+  function restoreSession(session) {
+    // Restore input fields
+    if (session.baseUrl && $('baseUrl')) {
+      $('baseUrl').value = session.baseUrl;
+    }
+    if (session.modules && $('modules')) {
+      $('modules').value = session.modules;
+    }
+
+    // Restore results and render all panels
+    const res = session.results ?? {};
+    [0,1,2,3].forEach(i => {
+      if (res[i]) {
+        results[i] = res[i];
+        renderPanel(i, res[i]);
+        $('tab-'+i)?.classList.add('done');
+        setStepState(i, 'done');
+      }
+    });
+
+    // Restore chat history
+    if (session.chatHistory?.length) {
+      chatHistory = session.chatHistory;
+      // Re-render chat messages
+      if (chatMessages) {
+        $('chatWelcome')?.remove();
+        chatHistory.forEach(m => appendChatMessage(m.role, m.content));
+      }
+    }
+
+    // Enable save button and Excel button
+    if (saveSessionBtn) saveSessionBtn.disabled = false;
+    if (results[0])     $('excelWrap')?.removeAttribute('hidden');
+
+    updateActionButtons();
+  }
+
+  // ── Update session info label ──────────────────────────────
+  function setSessionInfo(text, isActive = false) {
+    if (sessionInfoText) sessionInfoText.textContent = text;
+    const bar = $('sessionBar');
+    if (bar) bar.classList.toggle('active', isActive);
+  }
+
+  // ── Save session ───────────────────────────────────────────
+  saveSessionBtn?.addEventListener('click', async () => {
+    if (!window.electronAPI?.saveSession) {
+      showToast('Session saving only works in the desktop app');
+      return;
+    }
+
+    // Pick folder if not already chosen
+    if (!sessionFolderPath) {
+      sessionFolderPath = await window.electronAPI.pickSessionFolder();
+      if (!sessionFolderPath) return;
+    }
+
+    const session = buildSession();
+    const res     = await window.electronAPI.saveSession({
+      folderPath: sessionFolderPath,
+      session
+    });
+
+    if (res.success) {
+      const time = new Date().toLocaleTimeString();
+      setSessionInfo(`Saved at ${time}`, true);
+      showToast('✓ Session saved to ' + sessionFolderPath);
+    } else {
+      showToast('Save failed: ' + res.error);
+    }
+  });
+
+  // ── Load session ───────────────────────────────────────────
+  loadSessionBtn?.addEventListener('click', async () => {
+    if (!window.electronAPI?.pickSessionFolder) {
+      showToast('Session loading only works in the desktop app');
+      return;
+    }
+
+    const folderPath = await window.electronAPI.pickSessionFolder();
+    if (!folderPath) return;
+
+    // Check if session exists and show info before loading
+    const check = await window.electronAPI.checkSession({ folderPath });
+
+    if (!check.exists) {
+      showToast('No session file found in that folder');
+      return;
+    }
+
+    // Confirm load
+    const savedDate = new Date(check.savedAt).toLocaleString();
+    const moduleList = Array.isArray(check.modules)
+      ? check.modules.join(', ')
+      : check.modules;
+    const confirmed = window.confirm(
+      `Load session?\n\nSaved: ${savedDate}\nBase URL: ${check.baseUrl}\n\nThis will replace your current results.`
+    );
+    if (!confirmed) return;
+
+    const res = await window.electronAPI.loadSession({ folderPath });
+
+    if (!res.success) {
+      showToast('Load failed: ' + res.error);
+      return;
+    }
+
+    // Clear current state before restoring
+    results     = { 0: null, 1: null, 2: null, 3: null };
+    chatHistory = [];
+    [0,1,2,3].forEach(i => {
+      setStepState(i, 'idle');
+      $('tab-'+i)?.classList.remove('done');
+      $('empty-'+i)?.removeAttribute('hidden');
+      const c = $('content-'+i);
+      if (c) { c.setAttribute('hidden',''); c.innerHTML = ''; }
+    });
+    if (chatMessages) {
+      chatMessages.innerHTML = `
+        <div class="chat-welcome" id="chatWelcome">
+          <p>Session restored. Describe any bug or paste an error and I'll fix the code.</p>
+          <div class="chat-suggestions">
+            <button class="suggestion-chip" onclick="sendSuggestion(this)">Fix all import errors</button>
+            <button class="suggestion-chip" onclick="sendSuggestion(this)">Fix selector errors in auth.cy.js</button>
+            <button class="suggestion-chip" onclick="sendSuggestion(this)">Add missing beforeEach hooks</button>
+            <button class="suggestion-chip" onclick="sendSuggestion(this)">Fix package.json dependencies</button>
+          </div>
+        </div>`;
+    }
+
+    sessionFolderPath = folderPath;
+    restoreSession(res.session);
+
+    const savedDate2 = new Date(res.session.savedAt).toLocaleString();
+    setSessionInfo(`Loaded: ${savedDate2}`, true);
+    showToast('✓ Session loaded successfully');
+    switchTab(0);
+  });
+
+  // ── Auto-save after every agent run ───────────────────────
+  function autoSaveSession() {
+    if (!sessionFolderPath) return;
+    if (!window.electronAPI?.saveSession) return;
+    const session = buildSession();
+    window.electronAPI.saveSession({ folderPath: sessionFolderPath, session })
+      .then(res => {
+        if (res.success) {
+          const time = new Date().toLocaleTimeString();
+          setSessionInfo(`Auto-saved at ${time}`, true);
+        }
+      });
+  }
+
   /* ── Toast ────────────────────────────────────────────── */
   let toastTimer;
   function showToast(msg) {
@@ -272,14 +453,32 @@ document.addEventListener('DOMContentLoaded', () => {
     lines.forEach(raw => {
       const line = raw.trim();
       if (!line) return;
-      if (/^(TC[-\s]?\d+|#+ |Test Case \d+|\d+\.)/.test(line)) {
+      // Only treat as header if it matches strict TC-N: [UI/API] pattern
+      const tcMatch = line.match(/^TC-(\d+)\s*:\s*\[(UI|API)\]\s*(.+)/i);
+      if (tcMatch) {
         if (current) cards.push(current);
         current = {
-          title: line.replace(/^#+\s*/,'').replace(/^TC[-\s]?\d+:\s*/i,'').replace(/^\d+\.\s*/,''),
-          badge: /\[api\]|endpoint|request|response|status code/i.test(line) ? 'api' : 'ui',
-          body: []
+          id:    `TC-${String(tcMatch[1]).padStart(3,'0')}`,
+          title: tcMatch[3].replace(/\*\*/g,'').trim(),
+          badge: tcMatch[2].toLowerCase(),
+          body:  []
         };
-      } else if (current) current.body.push(line);
+      } else if (current && line && !line.match(/^(UI|API) TEST CASES/i) && !line.match(/^Base URL/i) && line !== '---') {
+        // Format body lines nicely
+        if (/^steps?\s*:/i.test(line)) {
+          current.body.push('<strong>Steps:</strong> ' + line.replace(/^steps?\s*:\s*/i,''));
+        } else if (/^preconditions?\s*:/i.test(line)) {
+          current.body.push('<strong>Preconditions:</strong> ' + line.replace(/^preconditions?\s*:\s*/i,''));
+        } else if (/^expected\s*results?\s*:/i.test(line)) {
+          current.body.push('<strong>Expected Result:</strong> ' + line.replace(/^expected\s*results?\s*:\s*/i,''));
+        } else if (/^priority\s*:/i.test(line)) {
+          current.body.push('<strong>Priority:</strong> ' + line.replace(/^priority\s*:\s*/i,''));
+        } else if (/^\d+[.)]\s/.test(line)) {
+          current.body.push('&nbsp;&nbsp;' + line);
+        } else {
+          current.body.push(line);
+        }
+      }
     });
     if (current) cards.push(current);
     const ui  = cards.filter(c => c.badge === 'ui').length;
@@ -294,14 +493,14 @@ document.addEventListener('DOMContentLoaded', () => {
         ${cards.map((c,i) => `
           <div class="tc-card">
             <div class="tc-head" role="button" tabindex="0" aria-expanded="false">
-              <span class="tc-number">TC-${String(i+1).padStart(2,'0')}</span>
+              <span class="tc-number">${c.id || 'TC-' + String(i+1).padStart(2,'0')}</span>
               <span class="tc-title">${escHtml(c.title)}</span>
               <span class="tc-badge ${c.badge}">${c.badge.toUpperCase()}</span>
               <svg class="tc-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </div>
-            <div class="tc-body">${c.body.map(l => escHtml(l)).join('<br>')}</div>
+            <div class="tc-body">${c.body.join('<br>')}</div>
           </div>`).join('')}
       </div>`;
     container.querySelectorAll('.tc-head').forEach(head => {
@@ -389,35 +588,38 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ── Download test cases as Excel ────────────────────────── */
   $('excelBtn')?.addEventListener('click', downloadTestCasesExcel);
 
-  function downloadTestCasesExcel() {
+ function downloadTestCasesExcel() {
     const text = results[0];
     if (!text) { showToast('No test cases yet — run the agent first'); return; }
 
-    console.log('Raw test cases text (first 500 chars):', text.substring(0, 500));
-
     const rows = parseTestCasesToRows(text);
-    console.log('Parsed rows:', rows.length, rows[0]);
+    console.log('Parsed rows:', rows.length);
 
     if (rows.length === 0) {
-      showToast('Could not parse test cases — check DevTools console for format');
+      showToast('Could not parse test cases — check DevTools console');
       return;
     }
 
+    if (window.electronAPI?.generateExcel) {
+      // Electron path — generate proper .xlsx via Python/Node on main process
+      window.electronAPI.generateExcel({ rows })
+        .then(res => {
+          if (res.success) showToast(`✓ Excel saved to ${res.path}`);
+          else showToast('Excel error: ' + res.error);
+        });
+    } else {
+      // Browser fallback — plain CSV
+      exportCSV(rows);
+    }
+  }
+
+  function exportCSV(rows) {
     const headers = ['ID','Type','Title','Preconditions','Steps','Expected Result','Priority'];
-    const csvLines = [
+    const lines = [
       headers.join(','),
       ...rows.map(r => headers.map(h => csvCell(r[h] ?? '')).join(','))
     ];
-    const csv = '\uFEFF' + csvLines.join('\r\n');
-
-    showToast(`Building Excel file with ${rows.length} test cases…`);
-
-    if (window.electronAPI?.saveOutput) {
-      window.electronAPI.saveOutput({ filename: 'test-cases.csv', content: csv })
-        .then(res => { if (res?.success) showToast(`✓ Saved ${rows.length} test cases to ${res.path}`); });
-      return;
-    }
-
+    const csv  = '\uFEFF' + lines.join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url  = URL.createObjectURL(blob);
     Object.assign(document.createElement('a'), { href: url, download: 'test-cases.csv' }).click();
@@ -429,120 +631,168 @@ document.addEventListener('DOMContentLoaded', () => {
     const rows    = [];
     let idCounter = 1;
 
-    // ── Strategy 1: split on TC header lines ──────────────
-    // Handles: "TC-1:", "TC1:", "1.", "# TC-1", "Test Case 1"
-    const tcSplitRegex = /(?=^(?:#{1,3}\s*)?(?:TC[-\s]?\d+|Test Case\s+\d+|\d+\.)\s*[:\-–]?\s*(?:\[(?:UI|API)\]\s*)?)/im;
-    const blocks = text.split(tcSplitRegex).filter(b => b.trim());
+    // Clean up common Claude formatting noise
+    const cleaned = text
+      .replace(/\*\*(.*?)\*\*/g, '$1')        // remove **bold**
+      .replace(/^#{1,4}\s.+$/gm, '')          // remove markdown headers
+      .replace(/^---+$/gm, '')                // remove horizontal rules
+      .replace(/^Base URL:.+$/gim, '')        // remove base URL lines
+      .replace(/^(UI|API) TEST CASES.*$/gim, '') // remove section headers
+      .replace(/^Test Cases:.*$/gim, '')      // remove "Test Cases:" lines
+      .replace(/^\*{1,2}TC-/gm, 'TC-')       // remove leading ** from TC headers
+      .replace(/\*{1,2}$/gm, '')             // remove trailing **
+      .replace(/`/g, '')                      // remove backticks
+      .trim();
 
-    console.log('TC blocks found:', blocks.length);
-    console.log('First block sample:', blocks[0]?.substring(0, 200));
+    // Split into blocks on TC-N: pattern
+    const blocks = cleaned.split(/\n(?=TC-\d+\s*:\s*\[(?:UI|API)\])/i);
 
-    if (blocks.length > 1) {
-      blocks.forEach(block => {
-        const row = parseOneBlock(block.trim(), idCounter);
-        if (row) { rows.push(row); idCounter++; }
+    console.log('Cleaned blocks found:', blocks.length);
+    if (blocks[0]) console.log('First block:\n', blocks[0].substring(0, 300));
+
+    blocks.forEach(block => {
+      const trimmed = block.trim();
+      if (!trimmed) return;
+
+      const lines = trimmed.split('\n').map(l => l.trim()).filter(Boolean);
+      if (!lines.length) return;
+
+      // Parse header line: TC-1: [UI] Title
+      const headerMatch = lines[0].match(/^TC-(\d+)\s*:\s*\[(UI|API)\]\s*(.+)/i);
+      if (!headerMatch) {
+        console.log('Skipped (no header match):', lines[0].substring(0, 80));
+        return;
+      }
+
+      const row = {
+        'ID':              `TC-${String(headerMatch[1]).padStart(3,'0')}`,
+        'Type':            headerMatch[2].toUpperCase(),
+        'Title':           headerMatch[3].trim(),
+        'Preconditions':   '',
+        'Steps':           '',
+        'Expected Result': '',
+        'Priority':        'Medium'
+      };
+
+      let lastField = null;
+
+      lines.slice(1).forEach(line => {
+        // Labelled field detection
+        if (/^preconditions?\s*:/i.test(line)) {
+          row['Preconditions'] = line.replace(/^preconditions?\s*:\s*/i, '').trim();
+          lastField = 'Preconditions';
+
+        } else if (/^steps?\s*:/i.test(line)) {
+          row['Steps'] = line.replace(/^steps?\s*:\s*/i, '').trim();
+          lastField = 'Steps';
+
+        } else if (/^expected\s*results?\s*:/i.test(line)) {
+          row['Expected Result'] = line.replace(/^expected\s*results?\s*:\s*/i, '').trim();
+          lastField = 'Expected Result';
+
+        } else if (/^priority\s*:/i.test(line)) {
+          row['Priority'] = line.replace(/^priority\s*:\s*/i, '').trim();
+          lastField = null;
+
+        // Numbered step line: "1. Do something"
+        } else if (/^\d+[.)]\s+/.test(line)) {
+          const stepText = line.replace(/^\d+[.)]\s+/, '').trim();
+          row['Steps'] += (row['Steps'] ? ' | ' : '') + stepText;
+          lastField = 'Steps';
+
+        // Bullet line
+        } else if (/^[-*•]\s+/.test(line)) {
+          const bulletText = line.replace(/^[-*•]\s+/, '').trim();
+          if (lastField === 'Expected Result') {
+            row['Expected Result'] += (row['Expected Result'] ? ' | ' : '') + bulletText;
+          } else {
+            row['Steps'] += (row['Steps'] ? ' | ' : '') + bulletText;
+            lastField = 'Steps';
+          }
+
+        // Continuation of previous field
+        } else if (lastField && lastField !== 'Priority') {
+          row[lastField] += ' ' + line;
+        }
       });
-      if (rows.length > 0) return rows;
+
+      // Only add if has a real title (not a section header)
+      if (row['Title'] && row['Title'].length > 3) {
+        rows.push(row);
+        idCounter++;
+      }
+    });
+
+    // Fallback — if block splitting found nothing, try line scanning
+    if (rows.length === 0) {
+      console.log('Block split found 0 rows — falling back to line scan');
+      return parseTestCasesLineScan(cleaned);
     }
 
-    // ── Strategy 2: line-by-line scan ─────────────────────
-    console.log('Strategy 1 failed — trying line-by-line scan');
-    const lines   = text.split('\n');
+    console.log(`Parsed ${rows.length} test cases`);
+    return rows;
+  }
+
+  // Fallback line-by-line scanner for unexpected formats
+  function parseTestCasesLineScan(text) {
+    const rows    = [];
+    let idCounter = 1;
     let current   = null;
     let lastField = null;
 
     const flush = () => {
-      if (!current?.title) return;
-      rows.push({
-        'ID':              current.id || `TC-${String(idCounter++).padStart(3,'0')}`,
-        'Type':            current.type || 'UI',
-        'Title':           current.title.trim(),
-        'Preconditions':   (current.preconditions || '').trim(),
-        'Steps':           (current.steps || '').trim(),
-        'Expected Result': (current.expected || '').trim(),
-        'Priority':        (current.priority || 'Medium').trim()
-      });
+      if (current?.title && current.title.length > 3) {
+        rows.push({
+          'ID':              current.id || `TC-${String(idCounter++).padStart(3,'0')}`,
+          'Type':            current.type || 'UI',
+          'Title':           current.title.trim(),
+          'Preconditions':   (current.preconditions || '').trim(),
+          'Steps':           (current.steps || '').trim(),
+          'Expected Result': (current.expected || '').trim(),
+          'Priority':        (current.priority || 'Medium').trim()
+        });
+      }
       current   = null;
       lastField = null;
     };
 
-    lines.forEach(raw => {
-      const line    = raw.trim();
-      const lineLow = line.toLowerCase();
-      if (!line || line === '---' || /^={3,}$/.test(line)) return;
+    text.split('\n').forEach(raw => {
+      const line = raw.trim();
+      if (!line) return;
 
-      // Any line that looks like a TC header
-      const hm = line.match(
-        /^(?:#{1,3}\s*)?(?:(TC[-\s]?\d+|Test Case\s*\d+|\d+)[.:\-–]\s*)?(?:\[(UI|API)\]\s*)?(.+)/i
-      );
-      const isHeader =
-        /^(?:#{1,3}\s*)?(?:TC[-\s]?\d+|Test Case\s*\d+|\d+\.)/i.test(line) &&
-        line.length < 150;
-
-      if (isHeader && hm) {
+      const hm = line.match(/^TC-(\d+)\s*:\s*\[(UI|API)\]\s*(.+)/i);
+      if (hm) {
         flush();
-        const rawId = hm[1] || '';
         current = {
-          id:            rawId ? rawId.replace(/\s/,'-').toUpperCase() : '',
-          type:          hm[2]?.toUpperCase() || (/api|endpoint|request|http/i.test(line) ? 'API' : 'UI'),
-          title:         hm[3]?.replace(/\*\*/g,'').trim() || line,
-          preconditions: '',
-          steps:         '',
-          expected:      '',
-          priority:      'Medium'
+          id: `TC-${String(hm[1]).padStart(3,'0')}`,
+          type: hm[2].toUpperCase(),
+          title: hm[3].trim(),
+          preconditions: '', steps: '', expected: '', priority: 'Medium'
         };
-        lastField = 'title';
+        lastField = null;
         return;
       }
 
       if (!current) return;
 
-      // Detect labelled fields
-      if (/^pre-?conditions?[:\s]/i.test(line)) {
-        current.preconditions = line.replace(/^pre-?conditions?[:\s]*/i,'').trim();
-        lastField = 'preconditions'; return;
-      }
-      if (/^steps?[:\s]/i.test(line)) {
-        current.steps = line.replace(/^steps?[:\s]*/i,'').trim();
-        lastField = 'steps'; return;
-      }
-      if (/^(?:expected\s*results?|expected)[:\s]/i.test(line)) {
-        current.expected = line.replace(/^(?:expected\s*results?|expected)[:\s]*/i,'').trim();
-        lastField = 'expected'; return;
-      }
-      if (/^priority[:\s]/i.test(line)) {
-        current.priority = line.replace(/^priority[:\s]*/i,'').trim();
-        lastField = 'priority'; return;
-      }
-      if (/^(?:type|test type)[:\s]/i.test(line)) {
-        const t = line.replace(/^(?:type|test type)[:\s]*/i,'').trim().toUpperCase();
-        if (t === 'API' || t === 'UI') current.type = t;
-        return;
-      }
-
-      // Numbered step lines  "1. Do something"
-      if (/^\d+[.)]\s/.test(line)) {
-        current.steps += (current.steps ? ' | ' : '') + line;
-        lastField = 'steps'; return;
-      }
-
-      // Bullet lines  "- Do something"
-      if (/^[-*]\s/.test(line)) {
-        if (lastField === 'steps') {
-          current.steps += (current.steps ? ' | ' : '') + line.replace(/^[-*]\s/,'');
-        } else if (lastField === 'expected') {
-          current.expected += (current.expected ? ' | ' : '') + line.replace(/^[-*]\s/,'');
-        } else {
-          current.steps += (current.steps ? ' | ' : '') + line.replace(/^[-*]\s/,'');
-        }
-        return;
-      }
-
-      // Continuation of last field
-      if (lastField && lastField !== 'title' && lastField !== 'priority') {
-        current[lastField === 'preconditions' ? 'preconditions' :
-                lastField === 'expected'      ? 'expected'      : 'steps'] +=
-          ' ' + line;
+      if (/^preconditions?\s*:/i.test(line)) {
+        current.preconditions = line.replace(/^preconditions?\s*:\s*/i,'').trim();
+        lastField = 'preconditions';
+      } else if (/^steps?\s*:/i.test(line)) {
+        current.steps = line.replace(/^steps?\s*:\s*/i,'').trim();
+        lastField = 'steps';
+      } else if (/^expected\s*results?\s*:/i.test(line)) {
+        current.expected = line.replace(/^expected\s*results?\s*:\s*/i,'').trim();
+        lastField = 'expected';
+      } else if (/^priority\s*:/i.test(line)) {
+        current.priority = line.replace(/^priority\s*:\s*/i,'').trim();
+        lastField = null;
+      } else if (/^\d+[.)]\s+/.test(line)) {
+        const s = line.replace(/^\d+[.)]\s+/,'').trim();
+        current.steps += (current.steps ? ' | ' : '') + s;
+        lastField = 'steps';
+      } else if (lastField && lastField !== 'priority') {
+        current[lastField] += ' ' + line;
       }
     });
 
@@ -746,6 +996,10 @@ document.addEventListener('DOMContentLoaded', () => {
       // Show Excel download button now that test cases exist
       $('excelWrap')?.removeAttribute('hidden');
 
+      // Enable save button and auto-save if folder already chosen
+      if (saveSessionBtn) saveSessionBtn.disabled = false;
+      autoSaveSession();
+
     } catch (err) {
       [0,1,2,3].forEach(i => setStepState(i, 'error'));
       showToast('Error: ' + err.message);
@@ -778,13 +1032,30 @@ document.addEventListener('DOMContentLoaded', () => {
     log('Generating test cases…');
     const testCases = await callClaude(apiKey,
       `You are a senior QA engineer. Generate structured test cases for ONE module only.
-Format each as:
-TC-N: [UI] or [API] Title
-Preconditions: …
-Steps: 1. … 2. …
-Expected Result: …
-Priority: High | Medium | Low
-Generate maximum 50 test cases. Cover happy paths, edge cases, and error scenarios.`,
+
+You MUST use EXACTLY this format for every test case. No deviations:
+
+TC-1: [UI] Title of test case here
+Preconditions: What must be true before the test
+Steps: 1. First step | 2. Second step | 3. Third step
+Expected Result: What should happen after all steps
+Priority: High
+
+TC-2: [API] Title of next test case
+Preconditions: ...
+Steps: 1. ... | 2. ...
+Expected Result: ...
+Priority: Medium
+
+STRICT RULES:
+- Every TC must start with "TC-N: [UI]" or "TC-N: [API]" on its own line
+- Steps MUST be on ONE line, separated by " | " between each step
+- Never use sub-headers, bold text, or markdown inside a test case
+- Never write "UI TEST CASES" or "API TEST CASES" as section headers
+- Never put base URL or module name as a test case
+- Each field label (Preconditions, Steps, Expected Result, Priority) must be on its own line
+- Separate each test case with exactly one blank line
+- Generate maximum 50 test cases`,
       `Module: ${moduleName}\n\nRequirements:\n${req}\n\nBase URL: ${baseUrl}\n\n` +
       `Generate test cases for the "${moduleName}" module ONLY.`
     );

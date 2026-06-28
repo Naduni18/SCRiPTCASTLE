@@ -8,7 +8,7 @@ async function callClaude(apiKey, system, user) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
+      max_tokens: 8000,
       system,
       messages: [{ role: 'user', content: user }]
     })

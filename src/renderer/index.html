@@ -176,7 +176,35 @@
             </section>
 
         </div><!-- /sidebar-body -->
-
+        <!-- ── Session bar ──────────────────────────────────────── -->
+        <div class="session-bar" id="sessionBar">
+            <div class="session-info" id="sessionInfo">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.3" />
+                    <path d="M8 5v3.5l2 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                </svg>
+                <span id="sessionInfoText">No session loaded</span>
+            </div>
+            <div class="session-actions">
+                <button class="session-btn" id="saveSessionBtn" title="Save session to folder" disabled>
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="M2 11v3a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-3
+                 M8 1v8M5 6l3 3 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                    </svg>
+                    Save
+                </button>
+                <button class="session-btn" id="loadSessionBtn" title="Load session from folder">
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="M2 5v9a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7
+                 M2 5h4l1.5-2H14a1 1 0 0 1 1 1v1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                    </svg>
+                    Load
+                </button>
+            </div>
+        </div>
         <div class="sidebar-footer">
             <div class="progress-wrap" id="progressWrap" hidden>
                 <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
