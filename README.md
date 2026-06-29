@@ -18,7 +18,7 @@ An Electron desktop app powered by Claude AI that automatically generates test c
 | 8 | **Module-based Pipeline** | Runs the full pipeline per module — handles enterprise apps with thousands of test cases |
 | 9 | **Select & Regenerate TCs** | Pick specific test cases to regenerate scripts for, with AI-assisted selection |
 | 10 | **Upload Requirements** | Upload `.txt`, `.md`, `.pdf`, or `.docx` requirement files directly |
-| 11 | **Export to Excel** | Download all generated test cases as a `.csv` file that opens natively in Excel |
+| 11 | **Export to Excel** | Download all generated test cases as a `.xlsx` file that opens natively in Excel |
 | 12 | **Bug Fix Chat** | Built-in AI chat with full code context to fix errors in generated scripts |
 | 13 | **Session Save / Load** | Save your entire run (results + chat history) to disk and reload it later |
 | 14 | **Extract Files** | Writes all generated framework files directly to a folder on your disk |
@@ -140,7 +140,7 @@ After the agent completes, a **Re-run Self-Heal** button appears. Click it to re
 | Button | What it does |
 |--------|-------------|
 | **Extract Framework** | Opens a folder picker and writes all framework + script files to disk |
-| **Download Test Cases as Excel** | Saves a `.csv` with columns: ID, Type, Title, Preconditions, Steps, Expected Result, Priority |
+| **Download Test Cases as Excel** | Saves a `.xlsx` with columns: ID, Type, Title, Preconditions, Steps, Expected Result, Priority |
 | **Copy** | Copies the current tab's raw output to clipboard |
 | **Save** | Saves the current tab's raw output as a file |
 
