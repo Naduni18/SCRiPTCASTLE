@@ -1923,3 +1923,6 @@ select option {
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+#addReqDrawer.open,
+#addReqBackdrop.open { display: flex; }

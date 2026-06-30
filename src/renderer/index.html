@@ -266,6 +266,15 @@
                         Download Test Cases as Excel
                     </button>
                 </div>
+                <!-- Add New Requirements (append to existing run) -->
+                <div class="field" id="addReqWrap" hidden>
+                    <button class="action-btn" id="addReqBtn" style="width:100%;justify-content:center">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                            <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                        </svg>
+                        Add New Requirements
+                    </button>
+                </div>
             </section>
 
             <!-- Pipeline steps -->
@@ -654,6 +663,75 @@
         </svg>
         Fix Bugs
     </button>
+
+   <!-- ── Add Requirements Modal ──────────────────────────────── -->
+    <div class="tc-select-backdrop" id="addReqBackdrop"></div>
+    <div class="tc-select-drawer" id="addReqDrawer" aria-label="Add new requirements" style="max-width:560px">
+
+        <div class="tc-select-header">
+            <div class="tc-select-title">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+                </svg>
+                Add New Requirements
+            </div>
+            <button class="tc-select-close" id="addReqClose" aria-label="Close">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                </svg>
+            </button>
+        </div>
+
+        <div style="padding:16px;overflow-y:auto;flex:1">
+            <p style="font-size:13px;color:var(--c-text-2,#a0a8c0);margin:0 0 12px">
+                Describe new modules/features. The agent will generate test cases, framework files, and scripts for
+                <strong>only these new items</strong> and append them to your existing run — nothing already
+                generated will be touched.
+            </p>
+
+            <div class="field">
+                <label class="field-label">New module name(s) — one per line</label>
+                <textarea id="addReqModules" class="field-input field-textarea"
+                    placeholder="Wishlist&#10;Gift Cards" style="height:60px"></textarea>
+            </div>
+
+            <div class="field">
+                <label class="field-label">New requirements document</label>
+                <input type="file" id="addReqFile" accept=".txt,.md,.pdf,.docx,.doc" hidden />
+                <div class="upload-zone" id="addReqUploadZone">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M12 3v12M8 7l4-4 4 4" stroke="currentColor" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <span class="upload-label" id="addReqUploadLabel">Click to upload or drag & drop</span>
+                    <span class="upload-hint">.txt .md .pdf .docx</span>
+                </div>
+                <div class="upload-info" id="addReqUploadInfo" hidden>
+                    <span id="addReqFileName"></span>
+                    <button class="upload-clear" id="addReqUploadClear" aria-label="Remove file">✕</button>
+                </div>
+                <textarea id="addReqText" class="field-input field-textarea"
+                    placeholder="Or paste the new requirements text here…" style="margin-top:8px"></textarea>
+            </div>
+        </div>
+
+        <div class="tc-select-footer">
+            <div class="tc-select-stats" id="addReqStats"></div>
+            <div style="display:flex;gap:8px">
+                <button class="tc-select-cancel" id="addReqCancel">Cancel</button>
+                <button class="tc-select-confirm" id="addReqConfirm">
+                    <svg class="run-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="M5 3l8 5-8 5V3z" fill="currentColor" />
+                    </svg>
+                    <svg class="spin-icon" width="14" height="14" viewBox="0 0 16 16" fill="none"
+                        aria-hidden="true" style="display:none">
+                        <path d="M8 2a6 6 0 1 0 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                    </svg>
+                    <span class="run-label">Generate & Append</span>
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Toast -->
     <div class="toast" id="toast" role="alert" aria-live="polite" hidden>

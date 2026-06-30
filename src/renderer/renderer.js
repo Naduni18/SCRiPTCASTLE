@@ -29,6 +29,21 @@ document.addEventListener('DOMContentLoaded', () => {
   const chatInput    = $('chatInput');
   const chatSendBtn  = $('chatSend');
   const rehealBtn    = $('rehealBtn');
+  const addReqWrap        = $('addReqWrap');
+  const addReqBtn         = $('addReqBtn');
+  const addReqBackdrop    = $('addReqBackdrop');
+  const addReqDrawer      = $('addReqDrawer');
+  const addReqClose       = $('addReqClose');
+  const addReqCancel      = $('addReqCancel');
+  const addReqConfirm     = $('addReqConfirm');
+  const addReqModulesEl   = $('addReqModules');
+  const addReqText        = $('addReqText');
+  const addReqUploadZone  = $('addReqUploadZone');
+  const addReqFile        = $('addReqFile');
+  const addReqUploadInfo  = $('addReqUploadInfo');
+  const addReqFileName    = $('addReqFileName');
+  const addReqUploadClear = $('addReqUploadClear');
+  let addReqUploadedText  = '';
 
   console.log('DOM ready | chatFab:', !!chatFab, '| chatDrawer:', !!chatDrawer, '| runBtn:', !!runBtn);
 
@@ -325,6 +340,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Show re-heal button if scripts exist in the restored session
 if (results[2]) rehealBtn?.removeAttribute('hidden');
+if (results[2]) addReqWrap?.removeAttribute('hidden');
   }
 
   // ── Update session info label ──────────────────────────────
@@ -1207,7 +1223,9 @@ STRATEGY: data-cy | aria | text | composite`,
 
       // Show Excel download button now that test cases exist
       $('excelWrap')?.removeAttribute('hidden');
-      rehealBtn?.removeAttribute('hidden');   // ← ADD THIS LINE
+      // Show "Add New Requirements" button now that a run exists
+      addReqWrap?.removeAttribute('hidden');
+      rehealBtn?.removeAttribute('hidden');   
 
       // Enable save button and auto-save if folder already chosen
       if (saveSessionBtn) saveSessionBtn.disabled = false;
@@ -1239,6 +1257,99 @@ STRATEGY: data-cy | aria | text | composite`,
       setProgress(base, `[${moduleName}] ${msg}`);
       console.log(`[${moduleName}]`, msg);
     };
+
+/* ── Add New Requirements: generate + append to existing run ── */
+  addReqConfirm?.addEventListener('click', async () => {
+    if (running) { showToast('Agent is already running'); return; }
+
+    const apiKey  = getActiveApiKey();
+    const baseUrl = $('baseUrl')?.value.trim() ?? '';
+    const newModulesText = addReqModulesEl?.value ?? '';
+    const newModules = newModulesText.split('\n').map(m => m.trim()).filter(Boolean);
+    const newReq = addReqUploadedText || addReqText?.value.trim() || '';
+
+    if (!apiKey)        { showToast('Enter your API key first'); return; }
+    if (!baseUrl)       { showToast('Base URL is missing — check sidebar'); return; }
+    if (!newModules.length) { showToast('Enter at least one new module name'); return; }
+    if (!newReq)        { showToast('Upload or paste the new requirements'); return; }
+    if (!results[0])    { showToast('Run the agent at least once first'); return; }
+
+    // Prevent duplicate module names colliding with existing modules
+    const existingModules = ($('modules')?.value ?? '').split('\n').map(m => m.trim().toLowerCase()).filter(Boolean);
+    const dupes = newModules.filter(m => existingModules.includes(m.toLowerCase()));
+    if (dupes.length) {
+      showToast(`Module already exists: ${dupes.join(', ')} — use Re-run Self-Heal or rename it`);
+      return;
+    }
+
+    running = true;
+    addReqConfirm.disabled = true;
+    addReqConfirm.querySelector('.run-label').textContent = 'Generating…';
+    addReqConfirm.querySelector('.run-icon').style.display  = 'none';
+    addReqConfirm.querySelector('.spin-icon').style.display = '';
+
+    const addedTestCases  = [];
+    const addedFramework  = [];
+    const addedScripts    = [];
+    const addedHealReport = [];
+
+    try {
+      for (let m = 0; m < newModules.length; m++) {
+        const moduleName = newModules[m];
+        setProgress(Math.round((m / newModules.length) * 100), `[New] ${moduleName}`);
+
+        await runModulePipeline({
+          moduleName,
+          apiKey,
+          baseUrl,
+          req: newReq,
+          folderPath: agentFolderPath,   // reuse the same output folder, writes incrementally same as original run
+          moduleIndex: m,
+          totalModules: newModules.length,
+          allTestCases:  addedTestCases,
+          allFramework:  addedFramework,
+          allScripts:    addedScripts,
+          allHealReport: addedHealReport
+        });
+      }
+
+      // ── Append to existing results (never overwrite) ──────────────
+      results[0] = (results[0] ?? '') + '\n\n---\n\n' + addedTestCases.join('\n\n---\n\n');
+      results[1] = (results[1] ?? '') + '\n\n' + addedFramework.join('\n\n');
+      results[2] = (results[2] ?? '') + '\n\n' + addedScripts.join('\n\n');
+      results[3] = (results[3] ?? '') + '\n\n---\n\n' + addedHealReport.join('\n\n---\n\n');
+
+      [0,1,2,3].forEach(i => renderPanel(i, results[i]));
+
+      // Add new module names into the sidebar Modules box so future
+      // Re-run Self-Heal / re-extracts are aware of them
+      const modulesEl = $('modules');
+      if (modulesEl) {
+        modulesEl.value = (modulesEl.value.trim() + '\n' + newModules.join('\n')).trim();
+      }
+
+      showToast(`✓ Added ${newModules.length} new module(s)`);
+      autoSaveSession();
+      closeAddReqModal();
+
+      // Reset the modal fields for next use
+      addReqModulesEl.value = '';
+      addReqText.value = '';
+      addReqUploadedText = '';
+      addReqUploadInfo?.setAttribute('hidden', '');
+      addReqUploadZone?.removeAttribute('hidden');
+
+    } catch (err) {
+      showToast('Failed to add requirements: ' + err.message);
+      console.error('Add requirements error:', err);
+    }
+
+    running = false;
+    addReqConfirm.disabled = false;
+    addReqConfirm.querySelector('.run-label').textContent = 'Generate & Append';
+    addReqConfirm.querySelector('.run-icon').style.display  = '';
+    addReqConfirm.querySelector('.spin-icon').style.display = 'none';
+  });
 
     // ── Phase 1: Test cases ────────────────────────────────
     setStepState(0, 'running');
@@ -1862,6 +1973,49 @@ Output ONLY these files. No extra commentary outside the markers.
   tcSelectClose?.addEventListener('click',  closeTCSelect);
   tcSelectCancel?.addEventListener('click', closeTCSelect);
   tcSelectBackdrop?.addEventListener('click', closeTCSelect);
+
+/* ── Add New Requirements modal ──────────────────────────── */
+  function openAddReqModal() {
+    addReqBackdrop?.classList.add('open');
+    addReqDrawer?.classList.add('open');
+  }
+  function closeAddReqModal() {
+    addReqBackdrop?.classList.remove('open');
+    addReqDrawer?.classList.remove('open');
+  }
+
+  addReqBtn?.addEventListener('click', openAddReqModal);
+  addReqClose?.addEventListener('click', closeAddReqModal);
+  addReqCancel?.addEventListener('click', closeAddReqModal);
+  addReqBackdrop?.addEventListener('click', closeAddReqModal);
+
+  addReqUploadZone?.addEventListener('click', () => addReqFile?.click());
+  addReqFile?.addEventListener('change', async () => {
+    const file = addReqFile.files?.[0];
+    if (!file) return;
+    const ext = file.name.split('.').pop().toLowerCase();
+    try {
+      if ((ext === 'pdf' || ext === 'docx' || ext === 'doc') && window.electronAPI?.extractFileText) {
+        const arrayBuffer = await file.arrayBuffer();
+        addReqUploadedText = await window.electronAPI.extractFileText({
+          name: file.name, ext, data: Array.from(new Uint8Array(arrayBuffer))
+        });
+      } else {
+        addReqUploadedText = await file.text();
+      }
+      addReqFileName.textContent = file.name;
+      addReqUploadInfo?.removeAttribute('hidden');
+      addReqUploadZone?.setAttribute('hidden', '');
+    } catch (err) {
+      showToast('Failed to read file: ' + err.message);
+    }
+  });
+  addReqUploadClear?.addEventListener('click', () => {
+    addReqUploadedText = '';
+    addReqFile.value = '';
+    addReqUploadInfo?.setAttribute('hidden', '');
+    addReqUploadZone?.removeAttribute('hidden');
+  });
 
   // Enable the button when test cases are available
   function enableTCSelectBtn() {
